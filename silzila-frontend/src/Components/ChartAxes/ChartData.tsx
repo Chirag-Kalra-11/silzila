@@ -56,6 +56,7 @@ import {
 export const getChartData = async (
   axesValues: AxesValuProps[],
   chartProp: any,
+  chartControls: any,
   chartGroup: ChartFilterGroupProps,
   dashBoardGroup: any,
   propKey: string,
@@ -342,6 +343,15 @@ export const getChartData = async (
 
         if (axis.name === "Measure") {
           formattedField.aggr = field.agg;
+          if (
+            chartType === "crossTab" &&
+            chartControls.properties[propKey].crossTabStyleOptions.crossTabTotal
+          ) {
+            formattedField.rowColumnMatrix = [
+              _chartAxes[1].fields.length,
+              _chartAxes[2].fields.length,
+            ];
+          }
 
           //Updating windowFunction in QueryAPI
           if (field.windowfn) {
@@ -829,6 +839,14 @@ export const getChartData = async (
       formattedAxes.dimensions = [];
     }
 
+    if (
+      chartType === "crossTab" &&
+      chartControls.properties[propKey].crossTabStyleOptions.crossTabTotal
+    ) {
+      formattedAxes.subTotals =
+        chartControls.properties[propKey].crossTabStyleOptions.crossTabTotal;
+    }
+
     formattedAxes.filterPanels = [];
 
     /*	PRS 21/07/2022	Get filter object and pushed to request body object	*/
@@ -1250,17 +1268,17 @@ const ChartData = ({
 
                 field["NameWithIndex"] = _name;
                 _chartFieldTempObject[_name] = "";
-               // Logger("info", "NameWithIndex", field);
+                // Logger("info", "NameWithIndex", field);
               } else {
                 field["NameWithIndex"] = field.fieldname;
                 _chartFieldTempObject[field.fieldname] = "";
-               // Logger("info", "NameWithIndex", field);
+                // Logger("info", "NameWithIndex", field);
               }
 
-             // if (_fieldTempObject[_nameWithAgg] === undefined) {
-                field["NameWithAgg"] = _nameWithAgg;
-                //_fieldTempObject[_nameWithAgg] = "";
-               // Logger("info", "NameWithAgg", field);
+              // if (_fieldTempObject[_nameWithAgg] === undefined) {
+              field["NameWithAgg"] = _nameWithAgg;
+              //_fieldTempObject[_nameWithAgg] = "";
+              // Logger("info", "NameWithAgg", field);
               //}
             });
           });
@@ -1347,6 +1365,10 @@ const ChartData = ({
         }
       }
 
+      if (chartProp.chartType === "crossTab") {
+        serverCall = true;
+      }
+
       let serverData = [];
 
       if (serverCall) {
@@ -1355,6 +1377,7 @@ const ChartData = ({
         serverData = await getChartData(
           axesValues1,
           chartProp,
+          chartControls,
           chartGroup,
           dashBoardGroup,
           _propKey,
@@ -1369,6 +1392,12 @@ const ChartData = ({
         storeServerData(_propKey, serverData);
         if (chartProperties.properties[_propKey].chartType === "richText") {
           updateChartDataForDm(sortChartData(serverData));
+        } else if (
+          chartProperties.properties[_propKey].chartType === "crossTab" &&
+          chartControls.properties[_propKey].crossTabStyleOptions.crossTabTotal
+        ) {
+          // updateChartData(_propKey, sortChartData(serverData[0].result));
+          updateChartData(_propKey, serverData);
         } else {
           updateChartData(_propKey, sortChartData(serverData));
         }
@@ -1427,10 +1456,17 @@ const ChartData = ({
         // !_checkGroupsNotSame(_propKey)
         chartProp.axesEdited ||
         chartGroup.chartFilterGroupEdited ||
-        dashBoardGroup.dashBoardGroupEdited
+        dashBoardGroup.dashBoardGroupEdited ||
+        chartProp.chartType === "crossTab"
       ) {
+        console.log("clicked");
         makeServiceCall();
       }
+      // if (
+      //   chartControls.properties[_propKey].crossTabStyleOptions.crossTabTotal
+      // ) {
+      //   makeServiceCall();
+      // }
     }
 
     resetStore();
@@ -1442,6 +1478,8 @@ const ChartData = ({
     chartGroup.chartFilterGroupEdited,
     dashBoardGroup.dashBoardGroupEdited,
     tabTileProps.isDashboardTileSwitched,
+
+    chartControls.properties[_propKey].crossTabStyleOptions.crossTabTotal,
   ]);
 
   useEffect(() => {

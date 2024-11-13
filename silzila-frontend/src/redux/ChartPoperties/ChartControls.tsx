@@ -194,6 +194,9 @@ const chartControl = {
       crossTabStyleOptions: {
         borderWidth: 1,
         lineHeight: 1,
+        crossTabTotal: false,
+        crossTabSubTotals: false,
+        crossTabGrandTotal: false,
       },
       crossTabHeaderLabelOptions: {
         labelColorManual: false,
@@ -237,7 +240,7 @@ const chartControl = {
           numberSeparator: "Abbrev",
           selectedMeasure: {},
           // measureFormats will keep the format options for the measure selected in the chart for individual measure
-          measureFormats: {}
+          measureFormats: {},
         },
 
         yAxisFormats: {
@@ -553,6 +556,9 @@ const chartControlsReducer = (state: any = chartControl, action: any) => {
             crossTabStyleOptions: {
               borderWidth: 1,
               lineHeight: 1,
+              crossTabTotal: false,
+              crossTabSubTotals: false,
+              crossTabGrandTotal: false,
             },
             crossTabHeaderLabelOptions: {
               labelColorManual: false,
@@ -911,6 +917,9 @@ const chartControlsReducer = (state: any = chartControl, action: any) => {
             crossTabStyleOptions: {
               borderWidth: 1,
               lineHeight: 1,
+              crossTabTotal: false,
+              crossTabSubTotals: false,
+              crossTabGrandTotal: false,
             },
             crossTabHeaderLabelOptions: {
               labelColorManual: false,

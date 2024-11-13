@@ -56,15 +56,120 @@ const CrossTabChart = ({
 
   let chartPropData = property.chartData ? property.chartData : "";
 
-  let tempFormatedChartPropData = CrossTab.cloneData(chartPropData ?? {});
-
   const [showAsColumn, setShowAsColumn] = React.useState(true);
 
   const [formatedChartPropData, setFormatedChartPropData] = useState([]);
 
+  const sortChart = (chartData: any[]): any[] => {
+    let result: any[] = [];
+
+    if (chartData && chartData.length > 0) {
+      let _zones: any = chartProperties.properties[propKey].chartAxes.filter(
+        (zones: any) => zones.name !== "Filter"
+      );
+      let _chartFieldTempObject: any = {};
+
+      const findFieldIndexName = (name: string, i: number = 2): string => {
+        if (_chartFieldTempObject[`${name}_${i}`] !== undefined) {
+          i++;
+          return findFieldIndexName(name, i);
+        } else {
+          return `${name}_${i}`;
+        }
+      };
+
+      _zones.forEach((zoneItem: any) => {
+        zoneItem.fields.forEach((field: any) => {
+          let _nameWithAgg: string = field.displayname;
+
+          if (_chartFieldTempObject[field.fieldname] !== undefined) {
+            let _name = findFieldIndexName(field.fieldname);
+
+            field["NameWithIndex"] = _name;
+            _chartFieldTempObject[_name] = "";
+          } else {
+            field["NameWithIndex"] = field.fieldname;
+            _chartFieldTempObject[field.fieldname] = "";
+          }
+
+          field["NameWithAgg"] = _nameWithAgg;
+        });
+      });
+
+      chartData.forEach((data: any) => {
+        let _chartDataObj: any = {};
+
+        _zones.forEach((zoneItem: any) => {
+          zoneItem.fields.forEach((field: any) => {
+            _chartDataObj[field.NameWithAgg] = data[field.NameWithIndex];
+          });
+        });
+
+        result.push(_chartDataObj);
+      });
+    }
+    return result;
+  };
+
+  let tempFormatedChartPropData = CrossTab.cloneData(chartPropData ?? {});
+  if (
+    chartControls.properties[propKey].crossTabStyleOptions.crossTabTotal &&
+    property.chartData
+  ) {
+    tempFormatedChartPropData = sortChart(property.chartData[0]?.result);
+  }
   /*
   To apply chart data format from 'property.formatOptions'. Deep cloned chart  data is used.
   */
+
+  const chartDataFormat = (tempFormatedChartPropData: any[]): any[] => {
+    let _formChartData: any = [];
+    if (tempFormatedChartPropData && tempFormatedChartPropData[0]) {
+      var chartDataKeys = Object.keys(tempFormatedChartPropData[0]);
+
+      tempFormatedChartPropData.forEach((item: any) => {
+        let formattedValue: any = {};
+
+        for (let i = 0; i < chartDataKeys.length; i++) {
+          /*  Need to format only numeric values  */
+          if (
+            typeof item[chartDataKeys[i]] === "number" ||
+            !isNaN(item[chartDataKeys[i]])
+          ) {
+            let _isMeasureField = dustbinValues.find((field) =>
+              //chartDataKeys[i].includes(field.fieldname)
+              chartDataKeys[i].includes(field.displayname)
+            );
+            /*  Need to format Measure dustbin fields */
+
+            if (
+              _isMeasureField &&
+              chartProperties.properties[propKey].chartAxes[
+                chartProperties.properties[propKey].chartAxes.findIndex(
+                  (item: any) => item.name === "Measure"
+                )
+              ].fields.find((val: any) => val.displayname === chartDataKeys[i])
+            ) {
+              formattedValue[chartDataKeys[i]] =
+                formatChartLabelValueForSelectedMeasure(
+                  property, // this property is chart controls
+                  chartProperties.properties[propKey],
+                  item[chartDataKeys[i]],
+                  chartDataKeys[i]
+                );
+            } else {
+              formattedValue[chartDataKeys[i]] = item[chartDataKeys[i]];
+            }
+          } else {
+            formattedValue[chartDataKeys[i]] = item[chartDataKeys[i]];
+          }
+        }
+
+        _formChartData.push(formattedValue);
+      });
+    }
+    return _formChartData;
+  };
 
   useEffect(() => {
     if (tempFormatedChartPropData && tempFormatedChartPropData[0]) {
@@ -163,19 +268,39 @@ const CrossTabChart = ({
         ) {
           let colData = crossTabData[hdrRow].columnItems[colIndex];
           let spanSize = 1;
+          console.log(colData.displayData);
 
           /*  Last row of the Column header span always of size 1 */
           if (hdrRow + 1 === crossTabData.length) {
             spanSize = 1;
+            // if (
+            //   property.crossTabStyleOptions.crossTabTotal &&
+            //   property.crossTabStyleOptions.crossTabSubTotals
+            // )
+            //   spanSize *= 2;
           } else if (hdrRow + 2 === crossTabData.length) {
             /*  Last but above row of the Column header span always of size measure fields count */
             spanSize = dustbinValues.length;
+            // if (
+            //   property.crossTabStyleOptions.crossTabTotal &&
+            //   property.crossTabStyleOptions.crossTabSubTotals
+            // )
+            //   spanSize *= 2;
           } else if (hdrRow - 1 === 0) {
             /* Top row column span calulated from ColumnCSV list with matching data list lenght  */
             let _list = chartDataCSV.columns.filter((item: any) =>
               item.includes(colData.displayData)
             );
             spanSize = _list.length;
+            console.log(colData.displayData, "5", _list);
+            // if (colData.displayData === "Total") {
+            //   spanSize = dustbinValues.length;
+            // }
+            // if (
+            //   property.crossTabStyleOptions.crossTabTotal &&
+            //   property.crossTabStyleOptions.crossTabSubTotals
+            // )
+            //   spanSize *= 2;
           } else {
             let compObj = "";
 
@@ -186,10 +311,31 @@ const CrossTabChart = ({
             let _list = chartDataCSV.columns.filter((item: any) =>
               item.includes(compObj)
             );
+            console.log(chartDataCSV.columns, compObj, _list);
             spanSize = _list.length;
           }
+          //////////////////////////////////////////////////////////////////////////////////////////////////
+          if (
+            // colData.compareObj["total"] &&
+            (colData.displayData === "Total" ||
+              colData.displayData === "Grand Total" ||
+              colData.displayData === "SubTotal") &&
+            colData.compareObj["total"] === "Total"
+          ) {
+            spanSize = dustbinValues.length;
+          }
+          // if (
+          //   property.crossTabStyleOptions.crossTabTotal &&
+          //   property.crossTabStyleOptions.crossTabSubTotals
+          // )
+          //   spanSize *= 2;
 
           colData.columnSpan = spanSize || 1;
+          // if (
+          //   property.crossTabStyleOptions.crossTabTotal &&
+          //   property.crossTabStyleOptions.crossTabSubTotals
+          // )
+          //   colData.columnSpan = spanSize || 2;
         }
       }
     } else {
@@ -233,7 +379,9 @@ const CrossTabChart = ({
     crossTabData: any,
     formatedChartPropData: any
   ) => {
+    console.log(crossTabData);
     for (var hdrRow = 0; hdrRow < crossTabData.length; hdrRow++) {
+      // for (var hdrRow = crossTabData.length - 1; hdrRow >= 0; hdrRow--) {
       for (
         let colIndex = 0;
         colIndex < crossTabData[hdrRow].columnItems.length;
@@ -244,7 +392,112 @@ const CrossTabChart = ({
           formatedChartPropData,
           colData.compareObj
         );
+        let colSpan = 0;
+        let tempcolSpan = 0;
+        let tempcompObj = CrossTab.cloneData(colData.compareObj);
+        tempcompObj["total"] = "Total";
+        console.log(colData.compareObj);
+        console.log(_list);
+        if (
+          property.crossTabStyleOptions.crossTabTotal &&
+          property.crossTabStyleOptions.crossTabSubTotals
+          // colData.compareObj["total"] === "Total"
+        ) {
+          chartPropData.forEach((member) => {
+            // console.log(`Name: ${user.name}, Age: ${user.age}`);
+            // console.log(
+            //   formatedChartPropData,
+            //   chartDataFormat(sortChart(member.result)),
+            //   sortChart(member.result),
+            //   compareObj
+            // );
+            // if (!_filteredData)
+            let _filteredData25 =
+              // _filteredData ||
+              CrossTab.getFilteredChartPropDataByCompareObject(
+                chartDataFormat(sortChart(member.result)),
+                colData.compareObj
+                // tempcompObj
+                // dustbinColumns.length + dustbinRows.length
+              );
+
+            let _filteredData52 =
+              // _filteredData ||
+              CrossTab.getFilteredChartPropDataByCompareObject(
+                chartDataFormat(sortChart(member.result)),
+                tempcompObj
+                // dustbinColumns.length + dustbinRows.length
+              );
+
+            let isnotTotal = false;
+            for (let i = hdrRow + 1; i < dustbinColumns.length; i++) {
+              if (
+                _filteredData52 &&
+                _filteredData52[0] &&
+                _filteredData52[0][
+                  CrossTab.getKeyWithPrefix(dustbinColumns[i], "col")
+                ] !== undefined
+              ) {
+                isnotTotal = true;
+              }
+            }
+            if (hdrRow === dustbinColumns.length) {
+              for (
+                let i = Object.keys(tempcompObj).length - 1;
+                i < dustbinColumns.length;
+                i++
+              ) {
+                if (
+                  _filteredData52 &&
+                  _filteredData52[0] &&
+                  _filteredData52[0][
+                    CrossTab.getKeyWithPrefix(dustbinColumns[i], "col")
+                  ] !== undefined
+                ) {
+                  isnotTotal = true;
+                }
+              }
+            }
+
+            // if (_filteredData25[0]) {
+            // _list = _filteredData25;
+            colSpan += _filteredData25.length;
+            if (!isnotTotal) tempcolSpan += _filteredData52.length;
+            // }
+            console.log(_filteredData25);
+          });
+          console.log(_list);
+
+          if (tempcolSpan !== colSpan) {
+            colSpan -= tempcolSpan;
+          }
+          // _list = CrossTab.getFilteredChartPropDataByCompareObject2(
+          //   formatedChartPropData,
+          //   colData.compareObj,
+          //   dustbinColumns.length + dustbinRows.length
+          // );
+        }
         colData.columnSpan = _list.length || 1;
+        if (colSpan > 0) {
+          colData.columnSpan = colSpan || 1;
+        }
+        if (
+          colData.compareObj["total"] === "Total" // &&
+          // hdrRow < dustbinColumns.length
+        ) {
+          colData.columnSpan = tempcolSpan || 1;
+          // colData.columnSpan = 1;
+        }
+        // _list.length *
+        //   Math.pow(
+        //     2,
+        //     crossTabData.length - hdrRow - dustbinColumns.length - 1
+        //   ) || 1;
+        // if (
+        //   property.crossTabStyleOptions.crossTabTotal &&
+        //   property.crossTabStyleOptions.crossTabSubTotals
+        // )
+        //   colData.columnSpan = _list.length * 2 || 2;
       }
     }
   };
@@ -277,6 +530,7 @@ const CrossTabChart = ({
         tempColumnObj.isRowField = true;
         tempColumnObj.isHeaderField = true;
         tempColumns.push(tempColumnObj);
+        // console.log(tempColumnObj);
       }
 
       /*  TODO:: During measure swap feature, added those measures to rows  */
@@ -409,17 +663,21 @@ const CrossTabChart = ({
   };
 
   const populateTableBodydata = (noValue?: boolean) => {
+    // console.log(chartDataCSV.rows);
     if (!showAsColumn) {
       chartDataCSV.rows = CrossTab.addDusbinValuesMeasuresInChartData(
         dustbinValues,
         chartDataCSV.rows
       );
     }
+    console.log(chartDataCSV.rows);
 
+    let prevDisplayData: string;
     /*  From chart data collection need to run the loop for distinct rows */
     chartDataCSV.rows.forEach((row: any, rowIndex: number) => {
       let tempRowObj = CrossTab.cloneData(rowObj);
       let columnIndex = 0;
+      let rowValues5 = row.split(CrossTab.delimiter);
 
       if (noValue) {
         columnIndex = dustbinColumns.length - 1;
@@ -428,17 +686,22 @@ const CrossTabChart = ({
       }
 
       if (crossTabData[columnIndex] && crossTabData[columnIndex].columnItems) {
+        console.log(crossTabData[columnIndex]);
         crossTabData[columnIndex].columnItems.forEach(
           (item: any, colIndex: number) => {
             let tempColumnObj = CrossTab.cloneData(columnObj);
             let compareObj = CrossTab.cloneData(item.compareObj);
             let rowValues = row.split(CrossTab.delimiter);
 
+            console.log(prevDisplayData);
+            console.log(rowValues);
+
             if (item.isRowField) {
               if (rowIndex === 0) {
                 tempColumnObj.displayData = rowValues[colIndex];
                 tempColumnObj.isHeaderField = true;
                 compareObj[item.displayData] = tempColumnObj.displayData;
+                console.log(compareObj);
               } else {
                 let lastColumnIndex = 0;
 
@@ -460,15 +723,32 @@ const CrossTabChart = ({
 
                   if (
                     previousRowData &&
-                    previousRowData.displayData === rowValues[colIndex]
+                    previousRowData.displayData === rowValues[colIndex] &&
+                    previousRowData.displayData !== "Total" //////////////////////////////////////////////
                   ) {
                     previousRowData.rowSpan =
                       rowIndex - parseInt(previousRowData.rowIndex) + 1;
                     tempColumnObj.skip = true;
                   } else {
+                    if (previousRowData.displayData === "Total") {
+                      // tempColumnObj.skip = true;
+                      // previousRowData.columnSpan *= dustbinRows.length;
+                    }
+
+                    // if (rowValues[colIndex] !== undefined) {
                     tempColumnObj.displayData = rowValues[colIndex];
                     compareObj[dustbinRows[colIndex].fieldname] =
                       tempColumnObj.displayData;
+                    // } else {
+                    // if (tempColumnObj.displayData === undefined) {
+                    //   tempColumnObj.skip = true;
+                    // }
+                    if (rowValues[colIndex] === "Total") {
+                      compareObj[dustbinRows[colIndex].fieldname] =
+                        previousRowData.displayData;
+                      // tempColumnObj.displayData = previousRowData.displayData;
+                      // tempColumnObj.columnSpan *= dustbinRows.length;
+                    }
                     //compareObj[dustbinRows[colIndex].displayname] = tempColumnObj.displayData;
                   }
                 } else {
@@ -481,21 +761,86 @@ const CrossTabChart = ({
               tempColumnObj.isHeaderField = true;
               tempColumnObj.isRowField = true;
               tempColumnObj.compareObj = compareObj;
+              tempColumnObj.rowIndex = rowIndex;
+              tempRowObj.columnItems.push(tempColumnObj);
+              tempRowObj.index = tempRowObj.index + 1;
+              // let tempColumnObj2 = CrossTab.cloneData(tempColumnObj);
+              // tempColumnObj2.rowIndex = rowIndex * 2 + 1;
+              // tempRowObj.columnItems.push(tempColumnObj2);
+              // tempRowObj.index = tempRowObj.index + 1;
+              // crossTabData.push(tempRowObj);
             } else {
               if (noValue) {
                 tempColumnObj.displayData = "";
                 tempColumnObj.columnSpan = 1;
               } else if (dustbinValues.length === 1) {
                 for (let i = 0; i < dustbinRows.length; i++) {
-                  compareObj[CrossTab.getKeyWithPrefix(dustbinRows[i], "row")] =
-                    rowValues[i];
+                  if (rowValues[i] !== "Grand Total")
+                    compareObj[
+                      CrossTab.getKeyWithPrefix(dustbinRows[i], "row")
+                    ] = rowValues[i];
+                  console.log(prevDisplayData);
+                  console.log(rowValues);
+                  console.log(rowValues[i]);
+                  if (rowValues[i] === "Total") {
+                    compareObj[
+                      CrossTab.getKeyWithPrefix(dustbinRows[i], "row")
+                    ] = prevDisplayData;
+                    compareObj["total"] = "Total";
+                  }
+                  if (rowValues[i] === "Grand Total") {
+                    // compareObj[
+                    //   CrossTab.getKeyWithPrefix(dustbinRows[i], "row")
+                    // ] = undefined;
+                    compareObj["total"] = "Total";
+                  }
                 }
 
-                let _filteredData =
-                  CrossTab.getFilteredChartPropDataByCompareObject(
-                    formatedChartPropData,
-                    compareObj
-                  )[0];
+                console.log(compareObj);
+
+                let _filteredData = [];
+                if (compareObj["total"] !== "Total") {
+                  _filteredData =
+                    CrossTab.getFilteredChartPropDataByCompareObject(
+                      formatedChartPropData,
+                      compareObj
+                    )[0];
+                  // console.log(
+                  //   CrossTab.getFilteredChartPropDataByCompareObject(
+                  //     formatedChartPropData,
+                  //     compareObj
+                  //   )
+                  // );
+                }
+
+                if (
+                  compareObj["total"] === "Total" //||
+                  // compareObj["total"] === "Grand Total"
+                ) {
+                  chartPropData.forEach((member) => {
+                    // console.log(`Name: ${user.name}, Age: ${user.age}`);
+                    console.log(
+                      formatedChartPropData,
+                      chartDataFormat(sortChart(member.result)),
+                      sortChart(member.result),
+                      compareObj
+                    );
+                    // if (!_filteredData)
+                    let _filteredData25 =
+                      // _filteredData ||
+                      CrossTab.getFilteredChartPropDataByCompareObject2(
+                        chartDataFormat(sortChart(member.result)),
+                        compareObj,
+                        dustbinColumns.length + dustbinRows.length
+                      )[0];
+
+                    if (_filteredData25) {
+                      _filteredData = _filteredData25;
+                    }
+                  });
+                }
+
+                console.log(_filteredData);
 
                 if (_filteredData) {
                   let _key = CrossTab.getKeyWithPrefix(dustbinValues[0], "val");
@@ -506,23 +851,91 @@ const CrossTabChart = ({
                   tempColumnObj.compareObj = _compareObj;
                 } else {
                   tempColumnObj.displayData = "";
+                  if (
+                    compareObj[
+                      // "total"
+                      CrossTab.getKeyWithPrefix(dustbinRows[0], "row")
+                    ] === "Total"
+                  ) {
+                    // tempColumnObj.skip = true;
+                  }
                 }
                 tempColumnObj.columnSpan = item.columnSpan;
               } else {
                 for (let i = 0; i < dustbinRows.length; i++) {
-                  compareObj[CrossTab.getKeyWithPrefix(dustbinRows[i], "row")] =
-                    rowValues[i];
+                  if (rowValues[i] !== "Grand Total")
+                    compareObj[
+                      CrossTab.getKeyWithPrefix(dustbinRows[i], "row")
+                    ] = rowValues[i];
+                  if (rowValues[i] === "Total") {
+                    compareObj[
+                      CrossTab.getKeyWithPrefix(dustbinRows[i], "row")
+                    ] = prevDisplayData;
+                    compareObj["total"] = "Total";
+                  }
+                  if (rowValues[i] === "Grand Total") {
+                    // compareObj[
+                    //   CrossTab.getKeyWithPrefix(dustbinRows[i], "row")
+                    // ] = undefined;
+                    compareObj["total"] = "Total";
+                  }
                 }
 
                 if (showAsColumn) {
-                  let _filteredData =
-                    CrossTab.getFilteredChartPropDataByCompareObject(
-                      formatedChartPropData,
-                      compareObj
-                    )[0];
+                  // let _filteredData =
+                  //   CrossTab.getFilteredChartPropDataByCompareObject(
+                  //     formatedChartPropData,
+                  //     compareObj
+                  //   )[0];
+
+                  let _filteredData = [];
+                  if (compareObj["total"] !== "Total") {
+                    _filteredData =
+                      CrossTab.getFilteredChartPropDataByCompareObject(
+                        formatedChartPropData,
+                        compareObj
+                      )[0];
+                    // console.log(
+                    //   CrossTab.getFilteredChartPropDataByCompareObject(
+                    //     formatedChartPropData,
+                    //     compareObj
+                    //   )
+                    // );
+                  }
+
+                  if (
+                    compareObj["total"] === "Total" //||
+                    // compareObj["total"] === "Grand Total"
+                  ) {
+                    chartPropData.forEach((member) => {
+                      // console.log(`Name: ${user.name}, Age: ${user.age}`);
+                      console.log(
+                        formatedChartPropData,
+                        chartDataFormat(sortChart(member.result)),
+                        sortChart(member.result),
+                        compareObj
+                      );
+                      // if (!_filteredData)
+                      let _filteredData25 =
+                        // _filteredData ||
+                        CrossTab.getFilteredChartPropDataByCompareObject2(
+                          chartDataFormat(sortChart(member.result)),
+                          compareObj,
+                          dustbinColumns.length + dustbinRows.length
+                        )[0];
+
+                      if (_filteredData25) {
+                        _filteredData = _filteredData25;
+                      }
+                    });
+                  }
+
+                  console.log(_filteredData);
 
                   if (_filteredData) {
-                    tempColumnObj.displayData = _filteredData[item.displayData];
+                    tempColumnObj.displayData =
+                      _filteredData[item.displayData] ||
+                      _filteredData[item.displayDataforTotal];
 
                     let _compareObj = CrossTab.cloneData(compareObj);
                     _compareObj[item.displayData] =
@@ -533,11 +946,55 @@ const CrossTabChart = ({
                   }
                   tempColumnObj.columnSpan = item.columnSpan;
                 } else {
-                  let _filteredData =
-                    CrossTab.getFilteredChartPropDataByCompareObject(
-                      formatedChartPropData,
-                      compareObj
-                    )[0];
+                  // let _filteredData =
+                  //   CrossTab.getFilteredChartPropDataByCompareObject(
+                  //     formatedChartPropData,
+                  //     compareObj
+                  //   )[0];
+
+                  let _filteredData = [];
+                  if (compareObj["total"] !== "Total") {
+                    _filteredData =
+                      CrossTab.getFilteredChartPropDataByCompareObject(
+                        formatedChartPropData,
+                        compareObj
+                      )[0];
+                    // console.log(
+                    //   CrossTab.getFilteredChartPropDataByCompareObject(
+                    //     formatedChartPropData,
+                    //     compareObj
+                    //   )
+                    // );
+                  }
+
+                  if (
+                    compareObj["total"] === "Total" //||
+                    // compareObj["total"] === "Grand Total"
+                  ) {
+                    chartPropData.forEach((member) => {
+                      // console.log(`Name: ${user.name}, Age: ${user.age}`);
+                      console.log(
+                        formatedChartPropData,
+                        chartDataFormat(sortChart(member.result)),
+                        sortChart(member.result),
+                        compareObj
+                      );
+                      // if (!_filteredData)
+                      let _filteredData25 =
+                        // _filteredData ||
+                        CrossTab.getFilteredChartPropDataByCompareObject2(
+                          chartDataFormat(sortChart(member.result)),
+                          compareObj,
+                          dustbinColumns.length + dustbinRows.length
+                        )[0];
+
+                      if (_filteredData25) {
+                        _filteredData = _filteredData25;
+                      }
+                    });
+                  }
+
+                  console.log(_filteredData);
 
                   if (_filteredData) {
                     let tempValue =
@@ -559,14 +1016,18 @@ const CrossTabChart = ({
                   tempColumnObj.columnSpan = item.columnSpan;
                 }
               }
+              tempColumnObj.rowIndex = rowIndex;
+              tempRowObj.columnItems.push(tempColumnObj);
+              tempRowObj.index = tempRowObj.index + 1;
             }
-            tempColumnObj.rowIndex = rowIndex;
-            tempRowObj.columnItems.push(tempColumnObj);
-            tempRowObj.index = tempRowObj.index + 1;
           }
         );
+        // console.log(tempRowObj);
         crossTabData.push(tempRowObj);
+        // crossTabData.push(tempRowObj);
       }
+      prevDisplayData = rowValues5[0];
+      console.log(rowValues5[0]);
     });
   };
 
@@ -581,6 +1042,13 @@ const CrossTabChart = ({
         crossTabData[crossTabData.length - 1].columnItems;
 
       for (let i = 0; i < previousColumnItems.length; i++) {
+        if (
+          crossTabData.length === 1 &&
+          i === previousColumnItems.length - 1 &&
+          property.crossTabStyleOptions.crossTabGrandTotal
+        ) {
+          continue;
+        }
         let _chartDataObj: any = {};
         dustbinValues.forEach((val) => {
           let tempColumnObj = CrossTab.cloneData(columnObj);
@@ -591,8 +1059,22 @@ const CrossTabChart = ({
           ); /*	Set Unique field display name	*/
           tempColumnObj.agg = val.agg;
           tempColumnObj.compareObj = previousColumnItems[i].compareObj;
+          if (
+            property.crossTabStyleOptions.crossTabTotal &&
+            property.crossTabStyleOptions.crossTabSubTotals &&
+            tempColumnObj.compareObj[
+              "total"
+              // CrossTab.getKeyWithPrefix(dustbinColumns[0], "col")
+            ] === "Total"
+          ) {
+            tempColumnObj.displayDataforTotal = tempColumnObj.displayData;
+            // tempColumnObj.displayData = val.fieldname;
+            // if (dustbinValues.length === 1) tempColumnObj.skip = true;
+            // tempColumnObj.compareObj = previousColumnItems[i].compareObj;
+          }
           tempColumnObj.isHeaderField = true;
           tempRowObj.columnItems.push(tempColumnObj);
+          console.log(tempColumnObj);
 
           _chartDataObj[tempColumnObj.displayData] = "";
         });
@@ -605,9 +1087,12 @@ const CrossTabChart = ({
     for (let i = 0; i < dustbinColumns.length; i++) {
       if (i === 0) {
         let tempRowObj = CrossTab.cloneData(rowObj);
+        console.log(tempRowObj);
 
+        console.log(chartDataCSV);
         let _headerColumnList = CrossTab.getColumnList(i, chartDataCSV.columns);
         tempRowObj.columnList.push(_headerColumnList);
+        console.log(_headerColumnList);
 
         _headerColumnList.forEach((col) => {
           let tempColumnObj = CrossTab.cloneData(columnObj);
@@ -616,24 +1101,85 @@ const CrossTabChart = ({
             CrossTab.getKeyWithPrefix(dustbinColumns[i], "col")
           ] = col;
           tempColumnObj.isHeaderField = true;
+          // tempColumnObj.columnSpan = 2;
+          if (col === "Grand Total") {
+            tempColumnObj.rowSpan =
+              dustbinColumns.length + (dustbinValues.length && 1);
+          }
           tempRowObj.columnItems.push(tempColumnObj);
+          // tempRowObj.columnItems.push(tempColumnObj);
+          if (
+            property.crossTabStyleOptions.crossTabTotal &&
+            property.crossTabStyleOptions.crossTabSubTotals &&
+            col !== "Grand Total"
+          ) {
+            let tempColumnObj2 = CrossTab.cloneData(columnObj);
+            tempColumnObj2.displayData = "Total";
+            tempColumnObj2.compareObj[
+              CrossTab.getKeyWithPrefix(dustbinColumns[i], "col")
+            ] = col;
+            tempColumnObj2.compareObj["total"] = "Total";
+            tempColumnObj2.isHeaderField = true;
+            tempColumnObj2.rowSpan = dustbinColumns.length;
+            // + (dustbinValues.length && 1);
+            // if (dustbinValues.length > 1) {
+            //   tempColumnObj2.rowSpan = dustbinColumns.length;
+            // }
+            tempRowObj.columnItems.push(tempColumnObj2);
+            console.log(tempColumnObj2);
+          }
+          console.log(tempColumnObj);
         });
+        if (
+          property.crossTabStyleOptions.crossTabTotal &&
+          property.crossTabStyleOptions.crossTabGrandTotal // &&
+          // col !== "Grand Total"
+        ) {
+          let tempColumnObj2 = CrossTab.cloneData(columnObj);
+          tempColumnObj2.displayData = "Grand Total";
+          // tempColumnObj2.compareObj[
+          //   CrossTab.getKeyWithPrefix(dustbinColumns[i], "col")
+          // ] = col;
+          tempColumnObj2.compareObj["total"] = "Total";
+          tempColumnObj2.isHeaderField = true;
+          // tempColumnObj2.rowSpan =
+          //   dustbinColumns.length + (dustbinValues.length && 1);
+          // if (dustbinValues.length > 1) {
+          tempColumnObj2.rowSpan = dustbinColumns.length;
+          // }
+          tempRowObj.columnItems.push(tempColumnObj2);
+          console.log(tempColumnObj2);
+        }
         crossTabData.push(tempRowObj);
       } else {
         let tempRowObj = CrossTab.cloneData(rowObj);
+        console.log(tempRowObj);
+        console.log(crossTabData[i - 1]);
 
         for (
           let colItem = 0;
           colItem < crossTabData[i - 1].columnItems.length;
-          colItem++
+          colItem += 1
         ) {
           let _currentCompObj =
             crossTabData[i - 1].columnItems[colItem].compareObj;
+          console.log(crossTabData[i - 1].columnItems[colItem]);
+          // if (
+          //   _currentCompObj[
+          //     CrossTab.getKeyWithPrefix(dustbinColumns[0], "col")
+          //   ] === "Total"
+          // ) {
+          //   continue;
+          // }
 
-          let list = CrossTab.getFilteredChartPropDataByCompareObject(
-            formatedChartPropData,
-            _currentCompObj
-          );
+          let list = [];
+          if (_currentCompObj["total"] !== "Total") {
+            list = CrossTab.getFilteredChartPropDataByCompareObject(
+              formatedChartPropData,
+              _currentCompObj
+            );
+          }
+          console.log(list);
           /*  For each row there can be may Chat data objects, so based on the Dusbin column index need to filter distinct Column headers*/
           let distinctList = CrossTab.getDistinctList(
             dustbinColumns,
@@ -641,17 +1187,27 @@ const CrossTabChart = ({
             i,
             list
           );
+          console.log(distinctList);
 
           /* IMPROMENT
-
-		 let _list = chartDataCSV.columns.filter(item => item.includes(crossTabData[i].columnItems[colItem].displayData))
-
-		 CrossTab.getColumnList(i, _list).forEach() --> form comp obj then filter using "getFilteredChartPropDataByCompareObject"
-		 */
+          
+          let _list = chartDataCSV.columns.filter(item => item.includes(crossTabData[i].columnItems[colItem].displayData))
+          
+          CrossTab.getColumnList(i, _list).forEach() --> form comp obj then filter using "getFilteredChartPropDataByCompareObject"
+          */
 
           distinctList = distinctList || [];
+          // if (
+          //   _currentCompObj[
+          //     CrossTab.getKeyWithPrefix(dustbinColumns[0], "col")
+          //   ] !== "Total"
+          // )
           tempRowObj.columnList.push(distinctList);
+          console.log(
+            _currentCompObj[CrossTab.getKeyWithPrefix(dustbinColumns[0], "col")]
+          );
 
+          console.log(distinctList);
           distinctList.forEach((item) => {
             let tempColumnObj = CrossTab.cloneData(columnObj);
             let tempCompareObj = CrossTab.cloneData(_currentCompObj);
@@ -662,10 +1218,106 @@ const CrossTabChart = ({
             ] = tempColumnObj.displayData;
             tempColumnObj.compareObj = tempCompareObj;
             tempColumnObj.parentColumnSpan = distinctList.length;
+            console.log(tempColumnObj);
             tempRowObj.columnItems.push(tempColumnObj);
             tempColumnObj.isHeaderField = true;
+            // if (
+            //   property.crossTabStyleOptions.crossTabTotal &&
+            //   property.crossTabStyleOptions.crossTabSubTotals
+            // ) {
+            //   let tempColumnObj2 = CrossTab.cloneData(tempColumnObj);
+            //   let tempCompareObj2 = CrossTab.cloneData(tempCompareObj);
+            //   // tempColumnObj2.displayData = "Totals";
+            //   // tempCompareObj2[
+            //   //   CrossTab.getKeyWithPrefix(dustbinColumns[0], "col")
+            //   // ] = "Total";
+            //   // tempColumnObj2.compareObj = tempCompareObj2;
+            //   // tempColumnObj2.rowSpan = 1;
+            //   tempRowObj.columnItems.push(tempColumnObj2);
+            // }
+
+            //////////////////////////////////////////////////////////////////////////////////////
+            if (
+              property.crossTabStyleOptions.crossTabTotal &&
+              property.crossTabStyleOptions.crossTabSubTotals &&
+              i < dustbinColumns.length - 1 //&&
+              // col !== "Grand Total"
+            ) {
+              let tempColumnObj2 = CrossTab.cloneData(tempColumnObj);
+              tempColumnObj2.displayData = "SubTotal";
+              tempColumnObj2.compareObj[
+                CrossTab.getKeyWithPrefix(dustbinColumns[i], "col")
+              ] = item[CrossTab.getKeyWithPrefix(dustbinColumns[i], "col")];
+              tempColumnObj2.compareObj["total"] = "Total";
+              tempColumnObj2.isHeaderField = true;
+              // tempColumnObj2.rowSpan =
+              //   dustbinColumns.length + (dustbinValues.length && 1) - i;
+              // if (dustbinValues.length > 1) {
+              tempColumnObj2.rowSpan = dustbinColumns.length - i;
+              // }
+              tempRowObj.columnItems.push(tempColumnObj2);
+              console.log(tempColumnObj2);
+            }
+            // console.log(tempColumnObj);
           });
+          if (
+            _currentCompObj[
+              "total"
+              // CrossTab.getKeyWithPrefix(dustbinColumns[0], "col")
+            ] === "Total"
+          ) {
+            let tempColumnObj = CrossTab.cloneData(columnObj);
+            let tempCompareObj = CrossTab.cloneData(_currentCompObj);
+            // tempColumnObj.displayData =
+            //   item[CrossTab.getKeyWithPrefix(dustbinColumns[i], "col")];
+            // tempCompareObj[
+            //   CrossTab.getKeyWithPrefix(dustbinColumns[i], "col")
+            // ] = tempColumnObj.displayData;
+            tempColumnObj.compareObj = tempCompareObj;
+            tempColumnObj.parentColumnSpan = distinctList.length;
+            console.log(tempColumnObj);
+            // tempRowObj.columnItems.push(tempColumnObj);
+            tempColumnObj.isHeaderField = true;
+            if (
+              property.crossTabStyleOptions.crossTabTotal &&
+              property.crossTabStyleOptions.crossTabSubTotals
+            ) {
+              let tempColumnObj2 = CrossTab.cloneData(tempColumnObj);
+              let tempCompareObj2 = CrossTab.cloneData(tempCompareObj);
+              tempColumnObj2.displayData = "";
+              // tempCompareObj2[
+              //   CrossTab.getKeyWithPrefix(dustbinColumns[0], "col")
+              // ] = "Total";
+              tempColumnObj2.compareObj["total"] = "Total";
+              tempColumnObj2.compareObj = tempCompareObj2;
+              tempColumnObj2.skip = true;
+              // tempColumnObj2.rowSpan = 1;
+              tempRowObj.columnItems.push(tempColumnObj2);
+            }
+          }
+          // if (
+          //   property.crossTabStyleOptions.crossTabTotal &&
+          //   property.crossTabStyleOptions.crossTabSubTotals //&&
+          //   // col !== "Grand Total"
+          // ) {
+          //   let tempColumnObj2 = CrossTab.cloneData(columnObj);
+          //   tempColumnObj2.displayData = "SubTotal";
+          //   tempColumnObj2.compareObj[
+          //     CrossTab.getKeyWithPrefix(dustbinColumns[i], "col")
+          //   ] = "Total"; //item[CrossTab.getKeyWithPrefix(dustbinColumns[i], "col")];
+          //   tempColumnObj2.compareObj["total"] = "Total";
+          //   tempColumnObj2.isHeaderField = true;
+          //   tempColumnObj2.rowSpan =
+          //     dustbinColumns.length + (dustbinValues.length && 1) - i - 1;
+          //   if (dustbinValues.length > 1) {
+          //     tempColumnObj2.rowSpan = dustbinColumns.length;
+          //   }
+          //   tempRowObj.columnItems.push(tempColumnObj2);
+          //   console.log(tempColumnObj2);
+          // }
+          // // console.log(tempColumnObj);
         }
+        console.log(tempRowObj);
         crossTabData.push(tempRowObj);
       }
     }
@@ -678,9 +1330,13 @@ const CrossTabChart = ({
   /*  Construct crossTabData object to show chart for atleat one field in all 3 dustbins  */
   const showChartForAtleastOneDusbinField = (noValue?: boolean) => {
     constructColumnHeaderArea();
+    console.log(crossTabData);
     updateColSpan(noValue);
+    console.log(crossTabData);
     appendRowsFieldsAsColumns();
+    console.log(crossTabData);
     populateTableBodydata(noValue);
+    console.log(crossTabData);
   };
 
   /*  Construct crossTabData object to show chart with column fields only  */
@@ -847,6 +1503,8 @@ const CrossTabChart = ({
     tempRowObj1.columnItems.forEach((item: any) => {
       columnsHeader.push(item?.displayData);
     });
+    console.log(columnsHeader);
+    console.log(formatedChartPropData);
 
     formatedChartPropData.forEach((data, index) => {
       let tempRowObj = CrossTab.cloneData(rowObj);
@@ -867,6 +1525,8 @@ const CrossTabChart = ({
             pos,
             true
           );
+          console.log(previousRowData);
+          console.log(data[key]);
 
           if (previousRowData && previousRowData.displayData === data[key]) {
             previousRowData.rowSpan =
@@ -956,33 +1616,87 @@ const CrossTabChart = ({
   /* To determine to show chart  */
   if (formatedChartPropData.length > 0) {
     enable = true;
+    // console.log(formatedChartPropData);
+    let tempRowforSubTotal =
+      formatedChartPropData[0][
+        CrossTab.getKeyWithPrefix(dustbinRows[0], "row")
+      ];
+    let tempColforSubTotal =
+      formatedChartPropData[0][
+        CrossTab.getKeyWithPrefix(dustbinColumns[0], "col")
+      ];
+    // console.log(tempColforSubTotal);
 
     formatedChartPropData.forEach((data) => {
       let _combineRow = "",
         _combineColumn = "";
 
+      // console.log(dustbinRows);
+      if (
+        data[CrossTab.getKeyWithPrefix(dustbinRows[0], "row")] !==
+          tempRowforSubTotal &&
+        property.crossTabStyleOptions.crossTabTotal &&
+        property.crossTabStyleOptions.crossTabSubTotals
+      ) {
+        tempRowforSubTotal =
+          data[CrossTab.getKeyWithPrefix(dustbinRows[0], "row")];
+        chartDataCSV.rows.push("Total");
+      }
+      // if (
+      //   data[CrossTab.getKeyWithPrefix(dustbinColumns[0], "col")] !==
+      //     tempColforSubTotal &&
+      //   property.crossTabStyleOptions.crossTabTotal &&
+      //   property.crossTabStyleOptions.crossTabSubTotals
+      // ) {
+      //   tempColforSubTotal =
+      //     data[CrossTab.getKeyWithPrefix(dustbinColumns[0], "col")];
+      //   chartDataCSV.columns.push("Total,");
+      // }
       dustbinRows.forEach((rowField) => {
+        // console.log(rowField);
         _combineRow = _combineRow.concat(
           data[CrossTab.getKeyWithPrefix(rowField, "row")],
           CrossTab.delimiter
         );
+        // console.log(CrossTab.getKeyWithPrefix(rowField, "row"));
+        // console.log(data[CrossTab.getKeyWithPrefix(rowField, "row")]);
+        // console.log(_combineRow);
       });
 
       dustbinColumns.forEach((colField) => {
+        // console.log(colField);
         _combineColumn = _combineColumn.concat(
           data[CrossTab.getKeyWithPrefix(colField, "col")],
           CrossTab.delimiter
         );
+        // console.log(data[CrossTab.getKeyWithPrefix(colField, "col")]);
+        // console.log(_combineColumn);
       });
 
       if (_combineRow && !chartDataCSV.rows.includes(_combineRow)) {
+        // console.log(_combineRow);
         chartDataCSV.rows.push(_combineRow);
       }
 
       if (_combineColumn && !chartDataCSV.columns.includes(_combineColumn)) {
+        // console.log(_combineColumn);
         chartDataCSV.columns.push(_combineColumn);
       }
     });
+    if (
+      property.crossTabStyleOptions.crossTabTotal &&
+      property.crossTabStyleOptions.crossTabSubTotals
+    ) {
+      chartDataCSV.rows.push("Total");
+      // chartDataCSV.columns.push("Total,");
+    }
+    if (
+      property.crossTabStyleOptions.crossTabTotal &&
+      property.crossTabStyleOptions.crossTabGrandTotal
+    ) {
+      chartDataCSV.rows.push("Grand Total");
+    }
+    console.log(chartDataCSV);
 
     /*  To determine how to construct CrossTabData object based dustbin fields count */
     if (
@@ -1002,6 +1716,7 @@ const CrossTabChart = ({
   /*
   Render function
   */
+  // crossTabData = [];
 
   return (
     <div

@@ -65,7 +65,7 @@ const ChartControlObjects = ({
     "Colors",
     "Style",
     "Sort",
-    "Format"
+    "Format",
   ];
 
   const pieOptionsList: string[] = [
@@ -116,6 +116,7 @@ const ChartControlObjects = ({
     "Sort",
     "Cond.Form",
     "Show/Hide",
+    "Total",
   ];
   const boxPlotOptionsList: string[] = [
     "Title",

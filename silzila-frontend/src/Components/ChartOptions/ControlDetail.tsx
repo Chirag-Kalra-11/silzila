@@ -38,6 +38,7 @@ import BubbleMapColors from "./Color/BubbleMapColors";
 import LineChartStyles from "./ChartStyle/LineChartStyles";
 import SimpleCardLabel from "./Labels/SimpleCardLabel";
 import SimpleCardColors from "./Color/SimpleCardColors";
+import CrossTabTotals from "./Total/CrossTabTotals";
 
 interface ControlDetailProps {
   chartProperties: ChartPropertiesProps;
@@ -159,6 +160,12 @@ const ControlDetail = ({
           return <Sort />;
         } else {
           return <Sort />;
+        }
+      case "Total":
+        if (chartType === "crossTab") {
+          return <CrossTabTotals />;
+        } else {
+          return <CrossTabTotals />;
         }
 
       default:

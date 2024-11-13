@@ -169,6 +169,9 @@ interface ChartConCrossTabStyleOptions {
   borderWidth: number;
   lineHeight: number;
   crossTabdata: any[];
+  crossTabTotal: boolean;
+  crossTabSubTotals: boolean;
+  crossTabGrandTotal: boolean;
 }
 
 interface ChartConCrosstabHeaderLabelOptions {
@@ -211,8 +214,8 @@ export interface ChartConLabelFormates {
   enableRounding: boolean;
   roundingDigits: number;
   selectedMeasure: {
-    name: string,
-    uId: string
+    name: string;
+    uId: string;
   };
   numberSeparator: string | any;
   measureFormats: {
@@ -225,7 +228,7 @@ export interface ChartConLabelFormates {
       numberSeparator: string | any;
       percentageCalculate: boolean;
     };
-  }
+  };
 }
 
 export interface ChartConYAxisFormats {

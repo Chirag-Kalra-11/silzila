@@ -695,6 +695,7 @@ const GraphArea = ({
     getChartData(
       chartProperties.properties[propKey].chartAxes,
       chartProperties,
+      chartControlState,
       chartGroup,
       dashBoardGroup,
       propKey,

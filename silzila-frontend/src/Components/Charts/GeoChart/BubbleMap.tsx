@@ -92,6 +92,7 @@ const BubbleMap = ({
     getChartData(
       axes,
       chartProperties,
+      chartControls,
       chartGroup,
       dashBoardGroup,
       propKey,
